@@ -32,11 +32,11 @@
     <input type="file" id="upload" accept="image/*">
     <div>
         <label for="width">宽度 (px):</label>
-        <input type="number" id="width"><br>
+        <input type="number" id="width" step="any"><br>
         <label for="height">高度 (px):</label>
-        <input type="number" id="height"><br>
+        <input type="number" id="height" step="any"><br>
         <label for="scale">缩放比例 (%):</label>
-        <input type="number" id="scale" value="100"><br>
+        <input type="number" id="scale" value="100" step="any"><br>
         <label for="keep-aspect-ratio">
             <input type="checkbox" id="keep-aspect-ratio" checked> 保持比例
         </label><br>
@@ -45,6 +45,7 @@
     <canvas id="canvas"></canvas>
     <script>
         let originalImageWidth, originalImageHeight;
+        let originalImageData;
 
         document.getElementById('upload').addEventListener('change', function(event) {
             const file = event.target.files[0];
@@ -55,10 +56,11 @@
                     img.onload = function() {
                         originalImageWidth = img.width;
                         originalImageHeight = img.height;
+                        originalImageData = img;
                         const canvas = document.getElementById('canvas');
-                        const ctx = canvas.getContext('2d');
                         canvas.width = img.width;
                         canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0);
                         updateInputs(img.width, img.height, 100);
                     };
@@ -68,10 +70,24 @@
             }
         });
 
+        function updateCanvas(width, height) {
+            const canvas = document.getElementById('canvas');
+            // 确保画布尺寸为整数
+            const roundedWidth = Math.round(width);
+            const roundedHeight = Math.round(height);
+            canvas.width = roundedWidth;
+            canvas.height = roundedHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 绘制时使用四舍五入后的尺寸
+            ctx.drawImage(originalImageData, 0, 0, roundedWidth, roundedHeight);
+        }
+
         function updateInputs(width, height, scale) {
-            document.getElementById('width').value = width;
-            document.getElementById('height').value = height;
-            document.getElementById('scale').value = scale.toFixed(2);
+            document.getElementById('width').value = Math.round(width);
+            document.getElementById('height').value = Math.round(height);
+            document.getElementById('scale').value = scale;
+            updateCanvas(width, height);
         }
 
         document.getElementById('width').addEventListener('input', function() {
@@ -83,7 +99,8 @@
                 updateInputs(newWidth, newHeight, scale);
             } else {
                 const scale = newWidth / originalImageWidth * 100;
-                document.getElementById('scale').value = scale.toFixed(2);
+                document.getElementById('scale').value = scale;
+                updateCanvas(newWidth, document.getElementById('height').value);
             }
         });
 
@@ -96,7 +113,8 @@
                 updateInputs(newWidth, newHeight, scale);
             } else {
                 const scale = newHeight / originalImageHeight * 100;
-                document.getElementById('scale').value = scale.toFixed(2);
+                document.getElementById('scale').value = scale;
+                updateCanvas(document.getElementById('width').value, newHeight);
             }
         });
 
@@ -109,22 +127,35 @@
         });
 
         function resizeImage() {
-            if (!originalImageWidth || !originalImageHeight) return;
+            if (!originalImageData) return;
 
-            const newWidth = parseFloat(document.getElementById('width').value);
-            const newHeight = parseFloat(document.getElementById('height').value);
-            
+            let newWidth = parseFloat(document.getElementById('width').value);
+            let newHeight = parseFloat(document.getElementById('height').value);
+
+            if (document.getElementById('keep-aspect-ratio').checked) {
+                const ratio = originalImageWidth / originalImageHeight;
+                if (newWidth && newHeight) {
+                    // 优先使用宽度计算高度
+                    newHeight = newWidth / ratio;
+                } else if (newWidth) {
+                    newHeight = newWidth / ratio;
+                } else if (newHeight) {
+                    newWidth = newHeight * ratio;
+                }
+            }
+
+            // 四舍五入确保整数尺寸
+            const roundedWidth = Math.round(newWidth);
+            const roundedHeight = Math.round(newHeight);
+
             const canvas = document.getElementById('canvas');
+            canvas.width = roundedWidth;
+            canvas.height = roundedHeight;
             const ctx = canvas.getContext('2d');
-            canvas.width = newWidth;
-            canvas.height = newHeight;
-            
-            const img = new Image();
-            img.onload = function() {
-                ctx.drawImage(img, 0, 0, newWidth, newHeight);
-                downloadImage();
-            };
-            img.src = canvas.toDataURL();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(originalImageData, 0, 0, roundedWidth, roundedHeight);
+
+            downloadImage();
         }
 
         function downloadImage() {
